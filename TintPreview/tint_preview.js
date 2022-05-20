@@ -203,14 +203,14 @@ var tintColor = [1.0, 0.705, 0.294];
 
 							<div class="bar tabs_small">
 
-								<input type="radio" name="tab" id="radio_color_picker" value="picker" v-model="open_tab">
-								<label for="radio_color_picker">${tl('panel.color.picker')}</label>
+								<input type="radio" name="tab" id="radio_tint_color_picker" value="picker" v-model="open_tab">
+								<label for="radio_tint_color_picker">${tl('panel.color.picker')}</label>
 
-								<input type="radio" name="tab" id="radio_color_palette" value="palette" v-model="open_tab">
-								<label for="radio_color_palette">${tl('panel.color.palette')}</label>
+								<input type="radio" name="tab" id="radio_tint_color_palette" value="palette" v-model="open_tab">
+								<label for="radio_tint_color_palette">${tl('panel.color.palette')}</label>
 
-								<input type="radio" name="tab" id="radio_color_both" value="both" v-model="open_tab">
-								<label for="radio_color_both">${tl('panel.color.both')}</label>
+								<input type="radio" name="tab" id="radio_tint_color_both" value="both" v-model="open_tab">
+								<label for="radio_tint_color_both">${tl('panel.color.both')}</label>
 
 								<div class="tool" @click="togglePickerType()" :title="picker_toggle_label">
 									<i class="fa_big icon" :class="picker_type == 'box' ? 'fas fa-square' : 'far fa-stop-circle'"></i>
