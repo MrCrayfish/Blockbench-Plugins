@@ -68,7 +68,6 @@ var tintColor = [1.0, 0.705, 0.294];
 					toggleTintAction.setIcon(showTint ? 'fa-fill-drip' : 'fa-fill');
 				}
 			});
-			MenuBar.addAction(toggleTintAction, 'tools');
 
 			setTintColorAction = new Action({
 				id: 'set_tint_color',
@@ -83,11 +82,16 @@ var tintColor = [1.0, 0.705, 0.294];
 					open_dialog = false; // Hack to allow keybinds to work
 				}
 			});
+
+			// Adds the actions to the tools menu
+			MenuBar.addAction(toggleTintAction, 'tools');
 			MenuBar.addAction(setTintColorAction, 'tools');
+			MenuBar.update();
 
 			// Adds the actions to the texture panel
 			Toolbars.texturelist.children.safePush(toggleTintAction);
 			Toolbars.texturelist.children.safePush(setTintColorAction);
+			Toolbars.texturelist.update(); // Fixes an issue where reloading the plugin wouldn't update the toolbar
 
 			var saved_colors = localStorage.getItem('colors');
 			if (saved_colors) {
