@@ -61,7 +61,7 @@ var tintColor = [1.0, 0.705, 0.294];
 				icon: 'fa-fill',
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
-				condition: () => Format.id == 'java_block' || Format.id == 'framework_open_model',
+				condition: () => Format.id == 'java_block' || Format.allowTinting,
 				click: () => {
 					toggleTint();
 					toggleTintAction.setIcon(showTint ? 'fa-fill-drip' : 'fa-fill');
@@ -75,7 +75,7 @@ var tintColor = [1.0, 0.705, 0.294];
 				icon: 'fa-palette',
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
-				condition: () => Format.id == 'java_block' || Format.id == 'framework_open_model',
+				condition: () => Format.id == 'java_block' || Format.allowTinting,
 				click: () => {
 					colorPickerDialog.show();
 					$('#blackout').hide();
