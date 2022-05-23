@@ -33,7 +33,8 @@ var origMats = [];
 		variant: 'both',
 		onload() {
 			window.Language.addTranslations('en', {
-				'dialog.tint_preview.set_tint_color': 'Set Tint Color'
+				'dialog.tint_preview.set_tint_color': 'Set Tint Color',
+				'panel.color.main_palette': 'Main Palette'
 			});
 
 			// Hook to patch textures when added
@@ -103,15 +104,6 @@ var origMats = [];
 			Toolbars.texturelist.children.safePush(setTintColorAction);
 			Toolbars.texturelist.update(); // Fixes an issue where reloading the plugin wouldn't update the toolbar
 
-			var saved_colors = localStorage.getItem('tint_colors');
-			if (saved_colors) {
-				try {
-					saved_colors = JSON.parse(saved_colors);
-				} catch (err) {
-					saved_colors = null;
-				}
-			}
-
 			/* Dialog that shows a color picker. Code based on color picker in the Blockbench. */
 			colorPickerDialog = new Dialog({
 				id: 'select_tint_color_dialog',
@@ -139,8 +131,9 @@ var origMats = [];
 							s: 70,
 							v: 100,
 						},
-						palette: (saved_colors && saved_colors.palette instanceof Array) ? saved_colors.palette : palettes.default.slice(),
-						history: (saved_colors && saved_colors.history instanceof Array) ? saved_colors.history : []
+						// Just use the palette/history from main color picker. Maybe in a future update it'll be separate
+						palette: Interface.Panels.color.vue._data.palette,
+						history: Interface.Panels.color.vue._data.history
 					},
 					methods: {
 						togglePickerType() {
@@ -211,7 +204,7 @@ var origMats = [];
 								<label for="radio_tint_color_picker">${tl('panel.color.picker')}</label>
 
 								<input type="radio" name="tab" id="radio_tint_color_palette" value="palette" v-model="open_tab">
-								<label for="radio_tint_color_palette">${tl('panel.color.palette')}</label>
+								<label for="radio_tint_color_palette">${tl('panel.color.main_palette')}</label>
 
 								<input type="radio" name="tab" id="radio_tint_color_both" value="both" v-model="open_tab">
 								<label for="radio_tint_color_both">${tl('panel.color.both')}</label>
@@ -259,12 +252,12 @@ var origMats = [];
 				}
 			});
 			colorPickerDialog.change = function(color) {
-				var value = new tinycolor(color)
+				var value = new tinycolor(color);
 				colorPickerDialog.content_vue._data.tint_color = value.toHexString();
 				setTintColor(value);
 			}
 			colorPickerDialog.set = function(color, no_sync) {
-				colorPickerDialog.change(color)
+				colorPickerDialog.change(color);
 			}
 			colorPickerDialog.get = function() {
 				return colorPickerDialog.content_vue._data.tint_color;
