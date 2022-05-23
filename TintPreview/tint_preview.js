@@ -109,7 +109,10 @@ function isColorArray(obj) {
 	Plugin.register('tint_preview', {
 		title: 'Tint Preview',
 		author: 'MrCrayfish',
-		description: 'Preview color on tint enabled faces! (JSON models only)', //TODO add about
+		description: 'Preview a color on tint enabled faces! (JSON models only)',
+		about: `The plugin adds the ability to preview a color on tint enabled cube faces. It adds two new options to the Tools menu that allows you to toggle tinting and change the tint color.
+Important: This plugin is designed for JSON models only and will not work for other formats.`,
+		tags: ["Minecraft: Java Edition"],
 		icon: 'fa-fill',
 		version: '0.0.1',
 		variant: 'both',
