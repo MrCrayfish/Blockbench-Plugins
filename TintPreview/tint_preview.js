@@ -63,6 +63,7 @@ var tintColor = [1.0, 0.705, 0.294];
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
 				condition: () => Format.id == 'java_block' || Format.allowTinting,
+				condition: () => isTintingFormat(Format),
 				click: () => {
 					toggleTint();
 					toggleTintAction.setIcon(showTint ? 'fa-fill-drip' : 'fa-fill');
@@ -76,6 +77,7 @@ var tintColor = [1.0, 0.705, 0.294];
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
 				condition: () => Format.id == 'java_block' || Format.allowTinting,
+				condition: () => isTintingFormat(Format),
 				click: () => {
 					colorPickerDialog.show();
 					$('#blackout').hide();
@@ -403,4 +405,8 @@ function patchTextureShader(data) {
 		mat.map = originalMat.map;
 		mat.name = texture.name;
 		Project.materials[texture.uuid] = mat;
+}
+
+function isTintingFormat(format) {
+	return format.id == 'java_block' || format.allowTinting;
 }
