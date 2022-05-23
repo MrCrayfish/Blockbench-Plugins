@@ -114,7 +114,7 @@ function isColorArray(obj) {
 Important: This plugin is designed for JSON models only and will not work for other formats.`,
 		tags: ["Minecraft: Java Edition"],
 		icon: 'fa-fill',
-		version: '0.0.1',
+		version: '1.0.0',
 		variant: 'both',
 		onload() {
 			// Custom translations. Am I doing this right?
