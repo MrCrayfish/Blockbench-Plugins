@@ -459,7 +459,7 @@ function restoreOriginalMaterials() {
 				});
 			}
 		});
-		console.log(`[Tint Preview] Patched ${count} textures`);
+		console.log(`[Tint Preview] Restored ${count} textures`);
 	}
 	origMats.purge();
 }
