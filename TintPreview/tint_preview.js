@@ -15,7 +15,6 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-var showTint = false;
 var tintColor = [1.0, 0.705, 0.294];
 var origMats = [];
 
@@ -62,16 +61,21 @@ var origMats = [];
 				}
 			});
 
+			// Setup state memory
+			StateMemory.init('tint_color_picker_tab', 'string');
+			StateMemory.init('tint_color_wheel', 'boolean');
+			StateMemory.init('show_tint', 'boolean');
+
 			toggleTintAction = new Action({
 				id: 'toggle_tint_preview',
 				name: 'Toggle Tint Preview',
-				icon: 'fa-fill',
+				icon: (StateMemory.show_tint ? 'fa-fill-drip' : 'fa-fill'),
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
 				condition: () => isTintingFormat(Format),
 				click: () => {
 					toggleTint();
-					toggleTintAction.setIcon(showTint ? 'fa-fill-drip' : 'fa-fill');
+					toggleTintAction.setIcon(StateMemory.show_tint ? 'fa-fill-drip' : 'fa-fill');
 				}
 			});
 
@@ -107,10 +111,6 @@ var origMats = [];
 					saved_colors = null;
 				}
 			}
-
-			// Setup state memory
-			StateMemory.init('tint_color_picker_tab', 'string')
-			StateMemory.init('tint_color_wheel', 'boolean')
 
 			/* Dialog that shows a color picker. Code based on color picker in the Blockbench. */
 			colorPickerDialog = new Dialog({
@@ -287,14 +287,15 @@ function setTintColor(color) {
 	let g = rgb.g / 255.0;
 	let b = rgb.b / 255.0;
 	tintColor = [r, g, b];
-	if(showTint) updateTint();
+	if(StateMemory.show_tint) updateTint();
 }
 
 /**
  * Toggles the tint preview
  */
 function toggleTint() {
-	showTint = !showTint;
+	StateMemory.show_tint = !StateMemory.show_tint;
+	StateMemory.save('show_tint');
 	updateTint();
 }
 
@@ -319,7 +320,7 @@ function updateTint() {
 		}
 		for(let key in obj.faces) {
 			let face = obj.faces[key];
-			if(face.tint != -1 && showTint) {
+			if(face.tint != -1 && StateMemory.show_tint) {
 				setTintColor(face.direction, tintColor); //TODO make configurable
 			} else {
 				setTintColor(face.direction, [1.0, 1.0, 1.0]);
