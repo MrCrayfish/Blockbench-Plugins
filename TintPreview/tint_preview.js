@@ -15,52 +15,95 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-var tintColor = [1.0, 0.705, 0.294];
+var defaultTintColor = [1.0, 0.705, 0.294];
 var origMats = [];
 
 (function() {
 	var toggleTintAction;
 	var setTintColorAction;
 	var colorPickerDialog;
-	var colorPicker;  
+	var colorPicker; 
+	var patchedCodecs = [];
+
+	// Hook to patch textures when added
+	function addTextureEvent(data) {
+		patchTextureShader(Project, data.texture);
+	} 
+
+	// Refreshes the tint for supported projects after parsing the model data
+	function parsedEvent(data) {
+		if(isTintingFormat(Project.format)) {
+			updateTint();
+		}
+	}
+
+	/** 
+	 * Adds a parsed event to supported codes to trigger a refresh of the tinted elements.
+	 * This is essentially a "completed loading" event, just a strange way to do it.
+	 */
+	function setupProjectEvent() {
+		if(!isTintingFormat(Project.format)) {
+			return;
+		}
+		for(let key in Codecs) {
+			let codec = Codecs[key];
+			if(codec.format && isTintingFormat(codec.format)) {
+				codec.on('parsed', parsedEvent);
+				patchedCodecs.safePush(codec);
+			}
+		}
+		// Add to project format since it can be a fallback
+		Codecs.project.on('parsed', parsedEvent);
+		patchedCodecs.safePush(Codecs.bbmodel);
+	}
+
+	// Hides the color picker dialog when switching projects
+	function unselectProjectEvent(data) {
+		let project = data.project;
+		if(Dialog.open == colorPickerDialog && isTintingFormat(project.format)) {
+			colorPickerDialog.hide();
+		}
+	} 
+
+	// Causes any changes to face tint toggle to update the tint preview
+	function finishEditEvent(data) {
+		if(Object.keys(Undo.current_save.elements).length && data.aspects.elements.length) {
+			let obj = data.aspects.elements[0];
+			let oldObj = Undo.current_save.elements[obj.uuid];
+			function faceChanged(a, b) {
+				return a.tint != b.tint;
+			}
+			for(let f of Canvas.face_order) {
+				if(faceChanged(obj.faces[f], oldObj.faces[f])) {
+					updateTint();
+					break;
+				}
+			}
+		}
+	}
 
 	Plugin.register('tint_preview', {
 		title: 'Tint Preview',
 		author: 'MrCrayfish',
-		description: 'Preview color on tint enabled faces! (JSON models only)',
+		description: 'Preview color on tint enabled faces! (JSON models only)', //TODO add about
 		icon: 'fa-fill',
 		version: '0.0.1',
 		variant: 'both',
 		onload() {
+			// Custom translations. Am I doing this right?
 			window.Language.addTranslations('en', {
 				'dialog.tint_preview.set_tint_color': 'Set Tint Color',
 				'panel.color.main_palette': 'Main Palette'
 			});
 
-			// Hook to patch textures when added
-			Blockbench.on('add_texture', (data) => {
-				patchTextureShader(Project, data.texture);
-			});
+			// Register events
+			Blockbench.on('add_texture', addTextureEvent);
+			Blockbench.on('unselect_project', unselectProjectEvent);
+			Blockbench.on('finish_edit', finishEditEvent);
+			Blockbench.on('setup_project', setupProjectEvent);
 
 			// Patches all current textures loaded in valid porjects
 			patchAllTextures(); 
-
-			// Causes any changes to face tint toggle to update the tint preview
-			Blockbench.on('finish_edit', function(data) {
-				if(Object.keys(Undo.current_save.elements).length && data.aspects.elements.length) {
-					let obj = data.aspects.elements[0];
-					let oldObj = Undo.current_save.elements[obj.uuid];
-					function faceChanged(a, b) {
-						return a.tint != b.tint;
-					}
-					for(let f of Canvas.face_order) {
-						if(faceChanged(obj.faces[f], oldObj.faces[f])) {
-							updateTint();
-							break;
-						}
-					}
-				}
-			});
 
 			// Setup state memory
 			StateMemory.init('tint_color_picker_tab', 'string');
@@ -91,6 +134,12 @@ var origMats = [];
 					colorPickerDialog.show();
 					$('#blackout').hide();
 					open_dialog = false; // Hack to allow keybinds to work
+					let tintColor = getTintColor(Project);
+					colorPickerDialog.set({
+						r: Math.round(Math.clamp(tintColor[0] * 255, 0, 255)), 
+						g: Math.round(Math.clamp(tintColor[1] * 255, 0, 255)),
+						b: Math.round(Math.clamp(tintColor[2] * 255, 0, 255))
+					});
 				}
 			});
 
@@ -266,21 +315,36 @@ var origMats = [];
 		onunload() {
 			toggleTintAction.delete();
 			setTintColorAction.delete();
+			colorPickerDialog.delete();
 			Toolbars.texturelist.children.remove(toggleTintAction);
 			Toolbars.texturelist.children.remove(setTintColorAction);
 			restoreOriginalMaterials();
+			Blockbench.removeListener('add_texture', addTextureEvent);
+			Blockbench.removeListener('unselect_project', unselectProjectEvent);
+			Blockbench.removeListener('finish_edit', finishEditEvent);
+			Blockbench.removeListener('setup_project', setupProjectEvent);
+			patchedCodecs.forEach(codec => codec.removeListener('parsed', parsedEvent));
 		}
 	});
 })();
 
 // Accepts a tinycolor
-function setTintColor(color) {
+function setTintColor(color, project = Project) {
 	let rgb = color.toRgb();
 	let r = rgb.r / 255.0;
 	let g = rgb.g / 255.0;
 	let b = rgb.b / 255.0;
-	tintColor = [r, g, b];
+	ProjectData[project.uuid].tintColor = [r, g, b];
 	if(StateMemory.show_tint) updateTint();
+}
+
+function getTintColor(project = Project) {
+	let tintColor = ProjectData[project.uuid].tintColor;
+	if(!tintColor || !Array.isArray(tintColor) || tintColor.length != 3 || !tintColor.every(e => typeof e === 'number')) {
+		ProjectData[project.uuid].tintColor = defaultTintColor;
+		tintColor = defaultTintColor;
+	}
+	return tintColor;
 }
 
 /**
@@ -311,10 +375,11 @@ function updateTint() {
 	            colors[startIndex + i] = rgb[i % 3];
 		    }
 		}
+		let tintColor = getTintColor();
 		for(let key in obj.faces) {
 			let face = obj.faces[key];
 			if(face.tint != -1 && StateMemory.show_tint) {
-				setTintColor(face.direction, tintColor); //TODO make configurable
+				setTintColor(face.direction, tintColor);
 			} else {
 				setTintColor(face.direction, [1.0, 1.0, 1.0]);
 			}
