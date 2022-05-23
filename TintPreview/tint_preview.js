@@ -18,6 +18,10 @@
 var defaultTintColor = [1.0, 0.705, 0.294];
 var origMats = [];
 
+function isColorArray(obj) {
+	return obj && Array.isArray(obj) && obj.length == 3 && obj.every(e => typeof e === 'number');
+}
+
 (function() {
 	var toggleTintAction;
 	var setTintColorAction;
@@ -54,7 +58,7 @@ var origMats = [];
 		}
 		// Add to project format since it can be a fallback
 		Codecs.project.on('parsed', parsedEvent);
-		patchedCodecs.safePush(Codecs.bbmodel);
+		patchedCodecs.safePush(Codecs.project);
 	}
 
 	// Hides the color picker dialog when switching projects
@@ -82,6 +86,26 @@ var origMats = [];
 		}
 	}
 
+	// Loads the tint colour from the project file
+	function loadProjectEvent(data) {
+		if(!isTintingFormat(Project.format)) {
+			return;
+		}
+		let tintColor = data.model.tint_color;
+		if(isColorArray(tintColor)) {
+			ProjectData[Project.uuid].tintColor = tintColor;
+		}
+	}
+
+	// Saves the tint colour to the project file
+	function saveProjectEvent(data) {
+		if(!isTintingFormat(Project.format)) {
+			return;
+		}
+		let model = data.model;
+		model.tint_color = getTintColor(Project);
+	}
+
 	Plugin.register('tint_preview', {
 		title: 'Tint Preview',
 		author: 'MrCrayfish',
@@ -101,6 +125,8 @@ var origMats = [];
 			Blockbench.on('unselect_project', unselectProjectEvent);
 			Blockbench.on('finish_edit', finishEditEvent);
 			Blockbench.on('setup_project', setupProjectEvent);
+			Blockbench.on('load_project', loadProjectEvent);
+			Blockbench.on('save_project', saveProjectEvent);
 
 			// Patches all current textures loaded in valid porjects
 			patchAllTextures(); 
@@ -135,7 +161,7 @@ var origMats = [];
 					$('#blackout').hide();
 					open_dialog = false; // Hack to allow keybinds to work
 					let tintColor = getTintColor(Project);
-					colorPickerDialog.set({
+					colorPickerDialog.updateColor({
 						r: Math.round(Math.clamp(tintColor[0] * 255, 0, 255)), 
 						g: Math.round(Math.clamp(tintColor[1] * 255, 0, 255)),
 						b: Math.round(Math.clamp(tintColor[2] * 255, 0, 255))
@@ -197,7 +223,7 @@ var origMats = [];
 						drop(event) {
 						},
 						setColor(color) {
-							colorPickerDialog.set(color);
+							colorPickerDialog.set(color, true);
 						},
 						validateMainColor() {
 							var color = this.tint_color;
@@ -218,7 +244,7 @@ var origMats = [];
 						tint_color: function(value) {
 							this.hover_color = '';
 							Object.assign(this.hsv, ColorPanel.hexToHsv(value));
-							colorPickerDialog.set(value);
+							colorPickerDialog.set(value, true);
 							$('#tint_colorpicker').spectrum('set', value);
 							this.text_input = value;
 						},
@@ -294,19 +320,22 @@ var origMats = [];
 							flat: true,
 							localStorageKey: 'brush_color_palette',
 							move: function(c) {
-								colorPickerDialog.change(c);
+								colorPickerDialog.change(c, true);
 							}
 						})
 					}
 				}
 			});
-			colorPickerDialog.change = function(color) {
+			colorPickerDialog.updateColor = function(color) {
 				var value = new tinycolor(color);
 				colorPickerDialog.content_vue._data.tint_color = value.toHexString();
-				setTintColor(value);
 			}
-			colorPickerDialog.set = function(color, no_sync) {
-				colorPickerDialog.change(color);
+			colorPickerDialog.change = function(color, save = false) {
+				colorPickerDialog.updateColor(color);
+				setTintColor(new tinycolor(color), save);
+			}
+			colorPickerDialog.set = function(color, save = false) {
+				colorPickerDialog.change(color, save);
 			}
 			colorPickerDialog.get = function() {
 				return colorPickerDialog.content_vue._data.tint_color;
@@ -323,24 +352,27 @@ var origMats = [];
 			Blockbench.removeListener('unselect_project', unselectProjectEvent);
 			Blockbench.removeListener('finish_edit', finishEditEvent);
 			Blockbench.removeListener('setup_project', setupProjectEvent);
+			Blockbench.removeListener('load_project', loadProjectEvent);
+			Blockbench.removeListener('save_project', saveProjectEvent);
 			patchedCodecs.forEach(codec => codec.removeListener('parsed', parsedEvent));
 		}
 	});
 })();
 
 // Accepts a tinycolor
-function setTintColor(color, project = Project) {
+function setTintColor(color, save = false) {
 	let rgb = color.toRgb();
 	let r = rgb.r / 255.0;
 	let g = rgb.g / 255.0;
 	let b = rgb.b / 255.0;
-	ProjectData[project.uuid].tintColor = [r, g, b];
+	ProjectData[Project.uuid].tintColor = [r, g, b];
+	if(save) Project.saved = false;
 	if(StateMemory.show_tint) updateTint();
 }
 
 function getTintColor(project = Project) {
 	let tintColor = ProjectData[project.uuid].tintColor;
-	if(!tintColor || !Array.isArray(tintColor) || tintColor.length != 3 || !tintColor.every(e => typeof e === 'number')) {
+	if(!isColorArray(tintColor)) {
 		ProjectData[project.uuid].tintColor = defaultTintColor;
 		tintColor = defaultTintColor;
 	}
@@ -367,7 +399,7 @@ function updateTint() {
 		const positionAttribute = geometry.getAttribute('position');
 		const colors = new Array(positionAttribute.count * 3);
 		colors.fill(1); // Fill with white
-		function setTintColor(face, rgb) {
+		function setFaceTintColor(face, rgb) {
 			let index = Canvas.face_order.indexOf(face);
 			if(index == -1) return;
 			let startIndex = index * 12;
@@ -379,9 +411,9 @@ function updateTint() {
 		for(let key in obj.faces) {
 			let face = obj.faces[key];
 			if(face.tint != -1 && StateMemory.show_tint) {
-				setTintColor(face.direction, tintColor);
+				setFaceTintColor(face.direction, tintColor);
 			} else {
-				setTintColor(face.direction, [1.0, 1.0, 1.0]);
+				setFaceTintColor(face.direction, [1.0, 1.0, 1.0]);
 			}
 		}
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
