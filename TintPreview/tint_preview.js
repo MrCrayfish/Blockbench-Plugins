@@ -177,11 +177,6 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			MenuBar.addAction(setTintColorAction, 'tools');
 			MenuBar.update();
 
-			// Adds the actions to the texture panel
-			Toolbars.texturelist.children.safePush(toggleTintAction);
-			Toolbars.texturelist.children.safePush(setTintColorAction);
-			Toolbars.texturelist.update(); // Fixes an issue where reloading the plugin wouldn't update the toolbar
-
 			/* Dialog that shows a color picker. Code based on color picker in the Blockbench. */
 			colorPickerDialog = new Dialog({
 				id: 'select_tint_color_dialog',
@@ -348,8 +343,6 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			toggleTintAction.delete();
 			setTintColorAction.delete();
 			colorPickerDialog.delete();
-			Toolbars.texturelist.children.remove(toggleTintAction);
-			Toolbars.texturelist.children.remove(setTintColorAction);
 			restoreOriginalMaterials();
 			Blockbench.removeListener('add_texture', addTextureEvent);
 			Blockbench.removeListener('unselect_project', unselectProjectEvent);
