@@ -17,6 +17,7 @@
 */
 var showTint = false;
 var tintColor = [1.0, 0.705, 0.294];
+var origMats = [];
 
 (function() {
 	var toggleTintAction;
@@ -27,7 +28,7 @@ var tintColor = [1.0, 0.705, 0.294];
 	Plugin.register('tint_preview', {
 		title: 'Tint Preview',
 		author: 'MrCrayfish',
-		description: 'Allows you to apply colour to tint enabled cubes',
+		description: 'Preview color on tint enabled faces! (JSON models only)',
 		icon: 'fa-fill',
 		version: '0.0.1',
 		variant: 'both',
@@ -36,12 +37,17 @@ var tintColor = [1.0, 0.705, 0.294];
 				'dialog.tint_preview.set_tint_color': 'Set Tint Color'
 			});
 
-			// Hook to patch texture shader
-			Blockbench.on('add_texture', patchTextureShader);
+			// Hook to patch textures when added
+			Blockbench.on('add_texture', (data) => {
+				patchTextureShader(Project, data.texture);
+			});
+
+			// Patches all current textures loaded in valid porjects
+			patchAllTextures(); 
 
 			// Causes any changes to face tint toggle to update the tint preview
 			Blockbench.on('finish_edit', function(data) {
-				if(Undo.current_save.elements && data.aspects.elements.length) {
+				if(Object.keys(Undo.current_save.elements).length && data.aspects.elements.length) {
 					let obj = data.aspects.elements[0];
 					let oldObj = Undo.current_save.elements[obj.uuid];
 					function faceChanged(a, b) {
@@ -62,7 +68,6 @@ var tintColor = [1.0, 0.705, 0.294];
 				icon: 'fa-fill',
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
-				condition: () => Format.id == 'java_block' || Format.allowTinting,
 				condition: () => isTintingFormat(Format),
 				click: () => {
 					toggleTint();
@@ -76,7 +81,6 @@ var tintColor = [1.0, 0.705, 0.294];
 				icon: 'fa-palette',
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
-				condition: () => Format.id == 'java_block' || Format.allowTinting,
 				condition: () => isTintingFormat(Format),
 				click: () => {
 					colorPickerDialog.show();
@@ -95,7 +99,7 @@ var tintColor = [1.0, 0.705, 0.294];
 			Toolbars.texturelist.children.safePush(setTintColorAction);
 			Toolbars.texturelist.update(); // Fixes an issue where reloading the plugin wouldn't update the toolbar
 
-			var saved_colors = localStorage.getItem('colors');
+			var saved_colors = localStorage.getItem('tint_colors');
 			if (saved_colors) {
 				try {
 					saved_colors = JSON.parse(saved_colors);
@@ -108,6 +112,7 @@ var tintColor = [1.0, 0.705, 0.294];
 			StateMemory.init('tint_color_picker_tab', 'string')
 			StateMemory.init('tint_color_wheel', 'boolean')
 
+			/* Dialog that shows a color picker. Code based on color picker in the Blockbench. */
 			colorPickerDialog = new Dialog({
 				id: 'select_tint_color_dialog',
 				title: 'dialog.tint_preview.set_tint_color',
@@ -172,9 +177,6 @@ var tintColor = [1.0, 0.705, 0.294];
 							this.hover_color = '';
 							Object.assign(this.hsv, ColorPanel.hexToHsv(value));
 							colorPickerDialog.set(value);
-							//BarItems.slider_color_h.update();
-							//BarItems.slider_color_s.update();
-							//BarItems.slider_color_v.update();
 							$('#tint_colorpicker').spectrum('set', value);
 							this.text_input = value;
 						},
@@ -273,6 +275,7 @@ var tintColor = [1.0, 0.705, 0.294];
 			setTintColorAction.delete();
 			Toolbars.texturelist.children.remove(toggleTintAction);
 			Toolbars.texturelist.children.remove(setTintColorAction);
+			restoreOriginalMaterials();
 		}
 	});
 })();
@@ -287,11 +290,19 @@ function setTintColor(color) {
 	if(showTint) updateTint();
 }
 
+/**
+ * Toggles the tint preview
+ */
 function toggleTint() {
 	showTint = !showTint;
 	updateTint();
 }
 
+/**
+ * Updates the color atrribute on the cube geometry. Faces that that have tint
+ * enabled will recieve the tint color while other faces will just recieve a
+ * white tint.
+ */
 function updateTint() {
 	Outliner.elements.forEach(obj => {
 		const geometry = obj.mesh.geometry;
@@ -318,9 +329,14 @@ function updateTint() {
 	});
 }
 
-function patchTextureShader(data) {
-	var texture = data.texture;
-	var originalMat = Project.materials[texture.uuid];
+/**
+ * Patches the texture in the given project with a custom material. The shader
+ * has been based on the original texture shader, just with the inclusion to 
+ * apply a vertex color. The tint calculation is the same as Minecraft, that being
+ * "texture * tint".
+ */
+function patchTextureShader(project, texture) {
+	var originalMat = project.materials[texture.uuid];
 	var vertShader = `
 			attribute float highlight;
 
@@ -404,9 +420,60 @@ function patchTextureShader(data) {
 		});
 		mat.map = originalMat.map;
 		mat.name = texture.name;
-		Project.materials[texture.uuid] = mat;
+		project.materials[texture.uuid] = mat;
+
+		// Store the original mat for restoring
+		origMats[texture.uuid] = originalMat;
 }
 
+/**
+ * Patches all textures in opened projects that support tinting with custom material. 
+ * Refer to #isTintingFormat(format) for the condition of a project to support tinting.
+ */
+function patchAllTextures() {
+	if(!ModelProject.all.length)
+		return;
+	let count = 0;
+	ModelProject.all.forEach(project => {
+		if(isTintingFormat(project.format)) {
+			let textures = project.textures;
+			textures.forEach(texture => {
+				patchTextureShader(project, texture);
+				count++;
+			});
+		}
+	});
+	console.log(`[Tint Preview] Patched ${count} textures`);
+}
+
+/**
+ * Restores the original materials for all textures in opened projects. Any
+ * reminant materials (from closed projects) will simply be purged.
+ */
+function restoreOriginalMaterials() {
+	if(ModelProject.all.length) {
+		let count = 0;
+		ModelProject.all.forEach(project => {
+			if(isTintingFormat(project.format)) {
+				let textures = project.textures;
+				textures.forEach(texture => {
+					let origMat = origMats[texture.uuid];
+					if(origMat) {
+						project.materials[texture.uuid] = origMat;
+						count++;
+					}
+				});
+			}
+		});
+		console.log(`[Tint Preview] Patched ${count} textures`);
+	}
+	origMats.purge();
+}
+
+/**
+ * Checks if the format supports tinting. Support for other formats can be added by
+ * adding "allowTinting = true" onto the format instance on creation.
+ */
 function isTintingFormat(format) {
 	return format.id == 'java_block' || format.allowTinting;
 }
