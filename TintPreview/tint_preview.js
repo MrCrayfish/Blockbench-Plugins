@@ -71,16 +71,58 @@ function isColorArray(obj) {
 
 	// Causes any changes to face tint toggle to update the tint preview
 	function finishEditEvent(data) {
-		if(Object.keys(Undo.current_save.elements).length && data.aspects.elements.length) {
+		let elements = data.aspects.elements;
+		if(Undo.current_save.elements && Object.keys(Undo.current_save.elements).length && Array.isArray(elements) && elements.length) {
 			let obj = data.aspects.elements[0];
 			let oldObj = Undo.current_save.elements[obj.uuid];
-			function faceChanged(a, b) {
+			function faceTintChanged(a, b) {
 				return a.tint != b.tint;
 			}
 			for(let f of Canvas.face_order) {
-				if(faceChanged(obj.faces[f], oldObj.faces[f])) {
+				if(faceTintChanged(obj.faces[f], oldObj.faces[f])) {
 					updateTint();
 					break;
+				}
+			}
+		}
+	}
+
+	// Causes undo and redo events related to face tint or deleted element to trigger tint update
+	function undoRedoEvent(data) {
+		let beforeElements = data.entry.before.elements;
+		if(typeof beforeElements !== 'object' || !beforeElements)
+			return;
+
+		let postElements = data.entry.post.elements;
+		if(typeof postElements !== 'object' || !postElements)
+			return;
+
+		// Causes the tint to update if the undo/redo action was "Toggle face tint".
+		if(Object.keys(beforeElements).length == Object.keys(postElements).length) {
+			for(let key in beforeElements) {
+				let beforeObj = beforeElements[key];
+				let postObj = postElements[key];
+				function faceTintChanged(a, b) {
+					return a.tint != b.tint;
+				}
+				for(let f of Canvas.face_order) {
+					if(faceTintChanged(beforeObj.faces[f], postObj.faces[f])) {
+						updateTint();
+						return;
+					}
+				}
+			}
+		} else if(!Object.keys(postElements).length) { // Elements were deleted
+			for(let key in beforeElements) {
+				let beforeObj = beforeElements[key];
+				for(let f of Canvas.face_order) {
+					function hasFaceTint(a) {
+						return a.tint != -1;
+					}
+					if(hasFaceTint(beforeObj.faces[f])) {
+						updateTint();
+						return;
+					}
 				}
 			}
 		}
@@ -130,6 +172,8 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			Blockbench.on('setup_project', setupProjectEvent);
 			Blockbench.on('load_project', loadProjectEvent);
 			Blockbench.on('save_project', saveProjectEvent);
+			Blockbench.on('undo', undoRedoEvent);
+			Blockbench.on('redo', undoRedoEvent);
 
 			// Patches all current textures loaded in valid porjects
 			patchAllTextures(); 
@@ -350,6 +394,8 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			Blockbench.removeListener('setup_project', setupProjectEvent);
 			Blockbench.removeListener('load_project', loadProjectEvent);
 			Blockbench.removeListener('save_project', saveProjectEvent);
+			Blockbench.removeListener('undo', undoRedoEvent);
+			Blockbench.removeListener('redo', undoRedoEvent);
 			patchedCodecs.forEach(codec => codec.removeListener('parsed', parsedEvent));
 		}
 	});
