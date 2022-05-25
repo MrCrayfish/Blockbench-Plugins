@@ -19,7 +19,7 @@ var defaultTintColor = [1.0, 0.705, 0.294];
 var dragTintColor = null;
 var origMats = [];
 
-function isColorArray(obj) {
+function isTintColorArray(obj) {
 	return obj && Array.isArray(obj) && obj.length == 3 && obj.every(e => typeof e === 'number');
 }
 
@@ -29,12 +29,16 @@ function isColorArray(obj) {
 	var patchedCodecs = [];
 	var openedDialog;
 
-	// Hook to patch textures when added
+	/**
+	 * Hook to patch textures when added
+	 */
 	function addTextureEvent(data) {
-		patchTextureShader(Project, data.texture);
+		applyTintingShader(Project, data.texture);
 	} 
 
-	// Refreshes the tint for supported projects after parsing the model data
+	/**
+	 * Refreshes the tint for supported projects after parsing the model data
+	 */
 	function parsedEvent(data) {
 		if(isTintingFormat(Project.format)) {
 			updateTint();
@@ -61,14 +65,18 @@ function isColorArray(obj) {
 		patchedCodecs.safePush(Codecs.project);
 	}
 
-	// Hides the color picker dialog when switching projects
+	/**
+	 * Hides the color picker dialog when switching projects
+	 */
 	function unselectProjectEvent(data) {
 		if(openedDialog) {
 			openedDialog.delete();
 		}
 	} 
 
-	// Causes any changes to face tint toggle to update the tint preview
+	/**
+	 * Causes any changes to face tint toggle to update the tint preview
+	 */
 	function finishEditEvent(data) {
 		let elements = data.aspects.elements;
 		if(Undo.current_save.elements && Object.keys(Undo.current_save.elements).length && Array.isArray(elements) && elements.length) {
@@ -86,7 +94,10 @@ function isColorArray(obj) {
 		}
 	}
 
-	// Causes undo and redo events related to face tint or deleted element to trigger tint update
+	/**
+	 * Causes undo and redo events related to face tint or deleted 
+	 * element to trigger tint update.
+	 */
 	function undoRedoEvent(data) {
 		let beforeElements = data.entry.before.elements;
 		if(typeof beforeElements !== 'object' || !beforeElements)
@@ -127,24 +138,72 @@ function isColorArray(obj) {
 		}
 	}
 
-	// Loads the tint colour from the project file
+	/**
+	 * Loads the tint colour from the project file
+	 */
 	function loadProjectEvent(data) {
 		if(!isTintingFormat(Project.format)) {
 			return;
 		}
 		let tintColor = data.model.tint_color;
-		if(isColorArray(tintColor)) {
+		if(isTintColorArray(tintColor)) {
 			ProjectData[Project.uuid].tintColor = tintColor;
 		}
 	}
 
-	// Saves the tint colour to the project file
+	/**
+	 * Saves the tint colour to the project file
+	 */
 	function saveProjectEvent(data) {
 		if(!isTintingFormat(Project.format)) {
 			return;
 		}
 		let model = data.model;
 		model.tint_color = getTintColor(Project);
+	}
+
+	/**
+	 * Patches all textures in opened projects that support tinting with custom material. 
+	 * Refer to #isTintingFormat(format) for the condition of a project to support tinting.
+	 */
+	function patchAllTextures() {
+		if(!ModelProject.all.length)
+			return;
+		let count = 0;
+		ModelProject.all.forEach(project => {
+			if(isTintingFormat(project.format)) {
+				let textures = project.textures;
+				textures.forEach(texture => {
+					applyTintingShader(project, texture);
+					count++;
+				});
+			}
+		});
+		console.log(`[Tint Preview] Patched ${count} textures`);
+	}
+
+	/**
+	 * Restores the original materials for all textures in opened projects. Any
+	 * reminant materials (from closed projects) will simply be purged.
+	 */
+	function restoreOriginalMaterials() {
+		if(ModelProject.all.length) {
+			let count = 0;
+			ModelProject.all.forEach(project => {
+				if(isTintingFormat(project.format)) {
+					let textures = project.textures;
+					textures.forEach(texture => {
+						let origMat = origMats[texture.uuid];
+						if(origMat) {
+							project.materials[texture.uuid] = origMat;
+							count++;
+						}
+					});
+				}
+			});
+			console.log(`[Tint Preview] Restored ${count} textures`);
+		}
+		origMats.purge();
 	}
 
 	Plugin.register('tint_preview', {
@@ -304,7 +363,7 @@ function createTintColorDialog(project = Project) {
 				onWheelColorChange(value) {
 					let color = new tinycolor(value);
 					this.tint_color = color.toHexString();
-					dragTintColor = convertToRgbArray(color);
+					dragTintColor = convertTintToRgbArray(color);
 					updateTint();
 				},
 				tl
@@ -380,13 +439,14 @@ function createTintColorDialog(project = Project) {
 				</div>
 			`,
 			mounted() {
+				// Initialize spectrum and add dragstop event
 				let colorPicker = $(this.$el).find('#tint_colorpicker').spectrum({
 					preferredFormat: "hex",
 					flat: true,
 					color: tintColor,
 					move: function(color) {
 						colorPickerDialog.set(color);
-						dragTintColor = convertToRgbArray(color);
+						dragTintColor = convertTintToRgbArray(color);
 						updateTint();
 					}
 				});
@@ -426,8 +486,8 @@ function createTintColorDialog(project = Project) {
 	return colorPickerDialog;
 }
 
-/* Converts tinycolor to rgb array in the format of [0, 1]*/
-function convertToRgbArray(color) {
+/* Converts tinycolor to rgb array in the range of [0, 1]*/
+function convertTintToRgbArray(color) {
 	let rgb = color.toRgb();
 	let r = Math.clamp(rgb.r / 255.0, 0.0, 1.0);
 	let g = Math.clamp(rgb.g / 255.0, 0.0, 1.0);
@@ -437,18 +497,22 @@ function convertToRgbArray(color) {
 
 // Accepts a tinycolor
 function setTintColor(color, save = false) {
-	let rgb = convertToRgbArray(color);
+	let rgb = convertTintToRgbArray(color);
 	ProjectData[Project.uuid].tintColor = rgb;
 	if(save) Project.saved = false;
 	updateTint();
 }
 
+/**
+ * Gets the tint color for the given project. This returns an array in
+ * in the format of [r, g, b]. If no project is specified, the current is used.
+ */
 function getTintColor(project = Project) {
-	if(dragTintColor && isColorArray(dragTintColor)) {
+	if(dragTintColor && isTintColorArray(dragTintColor)) {
 		return dragTintColor;
 	}
 	let tintColor = ProjectData[project.uuid].tintColor;
-	if(!isColorArray(tintColor)) {
+	if(!isTintColorArray(tintColor)) {
 		ProjectData[project.uuid].tintColor = defaultTintColor;
 		tintColor = defaultTintColor;
 	}
@@ -504,7 +568,7 @@ function updateTint() {
  * apply a vertex color. The tint calculation is the same as Minecraft, that being
  * "texture * tint".
  */
-function patchTextureShader(project, texture) {
+function applyTintingShader(project, texture) {
 	var originalMat = project.materials[texture.uuid];
 	var vertShader = `
 			attribute float highlight;
@@ -593,50 +657,6 @@ function patchTextureShader(project, texture) {
 
 		// Store the original mat for restoring
 		origMats[texture.uuid] = originalMat;
-}
-
-/**
- * Patches all textures in opened projects that support tinting with custom material. 
- * Refer to #isTintingFormat(format) for the condition of a project to support tinting.
- */
-function patchAllTextures() {
-	if(!ModelProject.all.length)
-		return;
-	let count = 0;
-	ModelProject.all.forEach(project => {
-		if(isTintingFormat(project.format)) {
-			let textures = project.textures;
-			textures.forEach(texture => {
-				patchTextureShader(project, texture);
-				count++;
-			});
-		}
-	});
-	console.log(`[Tint Preview] Patched ${count} textures`);
-}
-
-/**
- * Restores the original materials for all textures in opened projects. Any
- * reminant materials (from closed projects) will simply be purged.
- */
-function restoreOriginalMaterials() {
-	if(ModelProject.all.length) {
-		let count = 0;
-		ModelProject.all.forEach(project => {
-			if(isTintingFormat(project.format)) {
-				let textures = project.textures;
-				textures.forEach(texture => {
-					let origMat = origMats[texture.uuid];
-					if(origMat) {
-						project.materials[texture.uuid] = origMat;
-						count++;
-					}
-				});
-			}
-		});
-		console.log(`[Tint Preview] Restored ${count} textures`);
-	}
-	origMats.purge();
 }
 
 /**
