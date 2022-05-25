@@ -16,6 +16,7 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 var defaultTintColor = [1.0, 0.705, 0.294];
+var dragTintColor = null;
 var origMats = [];
 
 function isColorArray(obj) {
@@ -25,9 +26,8 @@ function isColorArray(obj) {
 (function() {
 	var toggleTintAction;
 	var setTintColorAction;
-	var colorPickerDialog;
-	var colorPicker; 
 	var patchedCodecs = [];
+	var openedDialog;
 
 	// Hook to patch textures when added
 	function addTextureEvent(data) {
@@ -63,9 +63,8 @@ function isColorArray(obj) {
 
 	// Hides the color picker dialog when switching projects
 	function unselectProjectEvent(data) {
-		let project = data.project;
-		if(Dialog.open == colorPickerDialog && isTintingFormat(project.format)) {
-			colorPickerDialog.hide();
+		if(openedDialog) {
+			openedDialog.delete();
 		}
 	} 
 
@@ -204,15 +203,10 @@ Important: This plugin is designed for JSON models only and will not work for ot
 				category: 'tools',
 				condition: () => isTintingFormat(Format),
 				click: () => {
-					colorPickerDialog.show();
+					openedDialog = createTintColorDialog();
+					openedDialog.show();
 					$('#blackout').hide();
-					open_dialog = false; // Hack to allow keybinds to work
-					let tintColor = getTintColor(Project);
-					colorPickerDialog.updateColor({
-						r: Math.round(Math.clamp(tintColor[0] * 255, 0, 255)), 
-						g: Math.round(Math.clamp(tintColor[1] * 255, 0, 255)),
-						b: Math.round(Math.clamp(tintColor[2] * 255, 0, 255))
-					});
+					open_dialog = false; // Hack to allow keybinds to pass through dialog
 				}
 			});
 
@@ -220,173 +214,11 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			MenuBar.addAction(toggleTintAction, 'tools');
 			MenuBar.addAction(setTintColorAction, 'tools');
 			MenuBar.update();
-
-			/* Dialog that shows a color picker. Code based on color picker in the Blockbench. */
-			colorPickerDialog = new Dialog({
-				id: 'select_tint_color_dialog',
-				title: 'dialog.tint_preview.set_tint_color',
-				singleButton: true,
-				width: 400,
-				darken: false,
-				component: {
-					data: {
-						width: 352,
-						open_tab: StateMemory.tint_color_picker_tab || 'picker',
-						picker_type: StateMemory.tint_color_wheel ? 'wheel' : 'box',
-						picker_toggle_label: tl('panel.color.picker_type'),
-						tint_color: '#ffb64c',
-						hover_color: '',
-						get color_code() {
-							return this.hover_color || this.tint_color
-						},
-						set color_code(color) {
-							this.tint_color = color.toLowerCase().replace(/[^a-f0-9#]/g, '');
-						},
-						text_input: '#ffb64c',
-						hsv: {
-							h: 36,
-							s: 70,
-							v: 100,
-						},
-						// Just use the palette/history from main color picker. Maybe in a future update it'll be separate
-						palette: Interface.Panels.color.vue._data.palette,
-						history: Interface.Panels.color.vue._data.history
-					},
-					methods: {
-						togglePickerType() {
-							StateMemory.tint_color_wheel = !StateMemory.tint_color_wheel;
-							StateMemory.save('tint_color_wheel');
-							this.picker_type = StateMemory.tint_color_wheel ? 'wheel' : 'box';
-						},
-						sort(event) {
-							var item = this.palette.splice(event.oldIndex, 1)[0];
-							this.palette.splice(event.newIndex, 0, item);
-						},
-						drop(event) {
-						},
-						setColor(color) {
-							colorPickerDialog.set(color, true);
-						},
-						validateMainColor() {
-							var color = this.tint_color;
-							if (!color.match(/^#[0-9a-f]{6}$/)) {
-								this.tint_color = tinycolor(color).toHexString();
-							}
-						},
-						isDarkColor(hex) {
-							if (hex) {
-								let color_val = new tinycolor(hex).getBrightness();
-								let bg_val = new tinycolor(CustomTheme.data.colors.back).getBrightness();
-								return Math.abs(color_val - bg_val) <= 50;
-							}
-						},
-						tl
-					},
-					watch: {
-						tint_color: function(value) {
-							this.hover_color = '';
-							Object.assign(this.hsv, ColorPanel.hexToHsv(value));
-							colorPickerDialog.set(value, true);
-							$('#tint_colorpicker').spectrum('set', value);
-							this.text_input = value;
-						},
-						open_tab(tab) {
-							StateMemory.tint_color_picker_tab = tab;
-							StateMemory.save('tint_color_picker_tab');
-							Vue.nextTick(() => {
-								$('#tint_colorpicker').spectrum('reflow');
-							})
-						}
-					},
-					template: `
-						<div id="tint_color_panel_wrapper" class="panel_inside">
-							<div id="color_panel_head">
-								<div class="main" v-bind:style="{'background-color': hover_color || tint_color}"></div>
-								<div class="side">
-									<input type="text" v-model="color_code" @focusout="validateMainColor()">
-									<div id="color_history">
-										<li
-											v-for="(color, i) in history" v-if="i || color != tint_color"
-											:key="color"
-											v-bind:style="{'background-color': color}"
-											v-bind:title="color" @click="setColor(color)"
-										></li>
-									</div>
-								</div>
-							</div>
-
-							<div class="bar tabs_small">
-
-								<input type="radio" name="tab" id="radio_tint_color_picker" value="picker" v-model="open_tab">
-								<label for="radio_tint_color_picker">${tl('panel.color.picker')}</label>
-
-								<input type="radio" name="tab" id="radio_tint_color_palette" value="palette" v-model="open_tab">
-								<label for="radio_tint_color_palette">${tl('panel.color.main_palette')}</label>
-
-								<input type="radio" name="tab" id="radio_tint_color_both" value="both" v-model="open_tab">
-								<label for="radio_tint_color_both">${tl('panel.color.both')}</label>
-
-								<div class="tool" @click="togglePickerType()" :title="picker_toggle_label">
-									<i class="fa_big icon" :class="picker_type == 'box' ? 'fas fa-square' : 'far fa-stop-circle'"></i>
-								</div>
-
-							</div>
-							<div v-show="open_tab == 'picker' || open_tab == 'both'">
-								<div v-show="picker_type == 'box'" ref="square_picker" :style="{maxWidth: width + 'px'}">
-									<input id="tint_colorpicker">
-								</div>
-								<color-wheel v-if="picker_type == 'wheel' && width" v-model="tint_color" :width="width" :height="width"></color-wheel>
-								<div class="toolbar_wrapper color_picker" toolbar="color_picker"></div>
-							</div>
-							<div v-show="open_tab == 'palette' || open_tab == 'both'">
-								<div class="toolbar_wrapper palette" toolbar="palette"></div>
-								<ul id="palette_list" class="list" v-sortable="{onUpdate: sort, onEnd: drop, fallbackTolerance: 10}" @contextmenu="ColorPanel.menu.open($event)">
-									<li
-										class="color" v-for="color in palette"
-										:title="color" :key="color"
-										:class="{selected: color == tint_color, contrast: isDarkColor(color)}"
-										@click="setColor(color)"
-										@mouseenter="hover_color = color"
-										@mouseleave="hover_color = ''"
-									>
-										<div class="color_inner" v-bind:style="{'background-color': color}"></div>
-									</li>
-								</ul>
-							</div>
-						</div>
-					`,
-					mounted() {
-						colorPicker = $(this.$el).find('#tint_colorpicker').spectrum({
-							preferredFormat: "hex",
-							color: 'ffb64c',
-							flat: true,
-							localStorageKey: 'brush_color_palette',
-							move: function(c) {
-								colorPickerDialog.change(c, true);
-							}
-						})
-					}
-				}
-			});
-			colorPickerDialog.updateColor = function(color) {
-				var value = new tinycolor(color);
-				colorPickerDialog.content_vue._data.tint_color = value.toHexString();
-			}
-			colorPickerDialog.change = function(color, save = false) {
-				colorPickerDialog.updateColor(color);
-				setTintColor(new tinycolor(color), save);
-			}
-			colorPickerDialog.set = function(color, save = false) {
-				colorPickerDialog.change(color, save);
-			}
-			colorPickerDialog.get = function() {
-				return colorPickerDialog.content_vue._data.tint_color;
-			}
 		},
 		onunload() {
 			toggleTintAction.delete();
 			setTintColorAction.delete();
-			colorPickerDialog.delete();
+			if(openedDialog) openedDialog.delete();
 			restoreOriginalMaterials();
 			Blockbench.removeListener('add_texture', addTextureEvent);
 			Blockbench.removeListener('unselect_project', unselectProjectEvent);
@@ -401,18 +233,223 @@ Important: This plugin is designed for JSON models only and will not work for ot
 	});
 })();
 
+function createTintColorDialog(project = Project) {
+
+	// Gets the current tint color for the project
+	let rgb = getTintColor(project);
+	let tintColor = new tinycolor({
+		r: Math.round(Math.clamp(rgb[0] * 255, 0, 255)), 
+		g: Math.round(Math.clamp(rgb[1] * 255, 0, 255)),
+		b: Math.round(Math.clamp(rgb[2] * 255, 0, 255))
+	});
+
+	// Create dialog
+	let colorPickerDialog = new Dialog({
+		id: 'select_tint_color_dialog',
+		title: 'dialog.tint_preview.set_tint_color',
+		singleButton: true,
+		width: 400,
+		darken: false,
+		component: {
+			data: {
+				width: 352,
+				open_tab: StateMemory.tint_color_picker_tab || 'picker',
+				picker_type: StateMemory.tint_color_wheel ? 'wheel' : 'box',
+				picker_toggle_label: tl('panel.color.picker_type'),
+				text_input: tintColor.toHexString(),
+				tint_color: tintColor.toHexString(),
+				hover_color: '',
+				get color_code() {
+					return this.hover_color || this.tint_color
+				},
+				set color_code(value) {
+					this.tint_color = value.toLowerCase().replace(/[^a-f0-9#]/g, '');
+				},
+				hsv: { h: 36, s: 70, v: 100, },
+				// Just use the palette/history from main color picker. Maybe in a future update it'll be separate
+				palette: Interface.Panels.color.vue._data.palette,
+				history: Interface.Panels.color.vue._data.history
+			},
+			methods: {
+				togglePickerType() {
+					StateMemory.tint_color_wheel = !StateMemory.tint_color_wheel;
+					StateMemory.save('tint_color_wheel');
+					this.picker_type = StateMemory.tint_color_wheel ? 'wheel' : 'box';
+					Vue.nextTick(() => {
+						$('#tint_colorpicker').spectrum('reflow');
+					});
+				},
+				sort(event) {
+					var item = this.palette.splice(event.oldIndex, 1)[0];
+					this.palette.splice(event.newIndex, 0, item);
+				},
+				drop(event) {
+				},
+				setColor(color) {
+					colorPickerDialog.set(color, true);
+				},
+				validateTintColorAndUpdate() {
+					var color = this.text_input;
+					if (!color.match(/^#[0-9a-f]{6}$/)) {
+						this.tint_color = tinycolor(color).toHexString();
+					}
+					setTintColor(new tinycolor(this.tint_color), true);
+				},
+				isDarkColor(hex) {
+					if (hex) {
+						let color_val = new tinycolor(hex).getBrightness();
+						let bg_val = new tinycolor(CustomTheme.data.colors.back).getBrightness();
+						return Math.abs(color_val - bg_val) <= 50;
+					}
+				},
+				onWheelColorChange(value) {
+					let color = new tinycolor(value);
+					this.tint_color = color.toHexString();
+					dragTintColor = convertToRgbArray(color);
+					updateTint();
+				},
+				tl
+			},
+			watch: {
+				tint_color: function(value) {
+					this.hover_color = '';
+					Object.assign(this.hsv, ColorPanel.hexToHsv(value));
+					$('#tint_colorpicker').spectrum('set', value);
+					this.text_input = value;
+				},
+				open_tab(tab) {
+					StateMemory.tint_color_picker_tab = tab;
+					StateMemory.save('tint_color_picker_tab');
+					Vue.nextTick(() => {
+						$('#tint_colorpicker').spectrum('reflow');
+					});
+				}
+			},
+			template: `
+				<div id="tint_color_panel_wrapper" class="panel_inside">
+					<div id="color_panel_head">
+						<div class="main" v-bind:style="{'background-color': hover_color || tint_color}"></div>
+						<div class="side">
+							<input type="text" v-model="color_code" @focusout="validateTintColorAndUpdate()">
+							<div id="color_history">
+								<li
+									v-for="(color, i) in history" v-if="i || color != tint_color"
+									:key="color"
+									v-bind:style="{'background-color': color}"
+									v-bind:title="color" @click="setColor(color)"
+								></li>
+							</div>
+						</div>
+					</div>
+
+					<div class="bar tabs_small">
+
+						<input type="radio" name="tab" id="radio_tint_color_picker" value="picker" v-model="open_tab">
+						<label for="radio_tint_color_picker">${tl('panel.color.picker')}</label>
+
+						<input type="radio" name="tab" id="radio_tint_color_palette" value="palette" v-model="open_tab">
+						<label for="radio_tint_color_palette">${tl('panel.color.main_palette')}</label>
+
+						<input type="radio" name="tab" id="radio_tint_color_both" value="both" v-model="open_tab">
+						<label for="radio_tint_color_both">${tl('panel.color.both')}</label>
+
+						<div class="tool" @click="togglePickerType()" :title="picker_toggle_label">
+							<i class="fa_big icon" :class="picker_type == 'box' ? 'fas fa-square' : 'far fa-stop-circle'"></i>
+						</div>
+
+					</div>
+					<div v-show="open_tab == 'picker' || open_tab == 'both'">
+						<div v-show="picker_type == 'box'" ref="square_picker" :width="width">
+							<input id="tint_colorpicker">
+						</div>
+						<color-wheel ref="color_wheel" v-if="picker_type == 'wheel' && width" v-model="tint_color" :width="width" :height="width" v-on:color-change="onWheelColorChange($event)"></color-wheel>
+					</div>
+					<div v-show="open_tab == 'palette' || open_tab == 'both'">
+						<div class="toolbar_wrapper palette" toolbar="palette"></div>
+						<ul id="palette_list" class="list" v-sortable="{onUpdate: sort, onEnd: drop, fallbackTolerance: 10}" @contextmenu="ColorPanel.menu.open($event)">
+							<li
+								class="color" v-for="color in palette"
+								:title="color" :key="color"
+								:class="{selected: color == tint_color, contrast: isDarkColor(color)}"
+								@click="setColor(color)"
+								@mouseenter="hover_color = color"
+								@mouseleave="hover_color = ''"
+							>
+								<div class="color_inner" v-bind:style="{'background-color': color}"></div>
+							</li>
+						</ul>
+					</div>
+				</div>
+			`,
+			mounted() {
+				console.log(tintColor);
+				let colorPicker = $(this.$el).find('#tint_colorpicker').spectrum({
+					preferredFormat: "hex",
+					flat: true,
+					color: tintColor,
+					move: function(color) {
+						colorPickerDialog.set(color);
+						dragTintColor = convertToRgbArray(color);
+						updateTint();
+					}
+				});
+				$(colorPicker).on("dragstop.spectrum", function(e, color) {
+					colorPickerDialog.set(color);
+					dragTintColor = null;
+					setTintColor(color, true);
+				});
+
+				// Adds a mouse up listener to the color wheel
+				let scope = this;
+				function colorWheelMouseUp(event) {
+					document.removeEventListener('mouseup', colorWheelMouseUp);
+					let color = new tinycolor(scope.$refs.color_wheel.color);
+					colorPickerDialog.set(color);
+					dragTintColor = null;
+					setTintColor(color, true);
+				}
+				$(this.$el).find('#color-wheel').on('mousedown', function(event) {
+					document.addEventListener('mouseup', colorWheelMouseUp);
+				});
+
+				// Fixes an issue on first load where the marker is in the wrong position
+				Vue.nextTick(() => {
+					$(colorPicker).spectrum('reflow');
+				});
+			}
+		}
+	});
+	colorPickerDialog.set = function(color) {
+		var value = new tinycolor(color);
+		colorPickerDialog.content_vue._data.tint_color = value.toHexString();
+	}
+	colorPickerDialog.get = function() {
+		return colorPickerDialog.content_vue._data.tint_color;
+	}
+	return colorPickerDialog;
+}
+
+/* Converts tinycolor to rgb array in the format of [0, 1]*/
+function convertToRgbArray(color) {
+	let rgb = color.toRgb();
+	let r = Math.clamp(rgb.r / 255.0, 0.0, 1.0);
+	let g = Math.clamp(rgb.g / 255.0, 0.0, 1.0);
+	let b = Math.clamp(rgb.b / 255.0, 0.0, 1.0);
+	return [r, g, b];
+}
+
 // Accepts a tinycolor
 function setTintColor(color, save = false) {
-	let rgb = color.toRgb();
-	let r = rgb.r / 255.0;
-	let g = rgb.g / 255.0;
-	let b = rgb.b / 255.0;
-	ProjectData[Project.uuid].tintColor = [r, g, b];
+	let rgb = convertToRgbArray(color);
+	ProjectData[Project.uuid].tintColor = rgb;
 	if(save) Project.saved = false;
-	if(StateMemory.show_tint) updateTint();
+	updateTint();
 }
 
 function getTintColor(project = Project) {
+	if(dragTintColor && isColorArray(dragTintColor)) {
+		return dragTintColor;
+	}
 	let tintColor = ProjectData[project.uuid].tintColor;
 	if(!isColorArray(tintColor)) {
 		ProjectData[project.uuid].tintColor = defaultTintColor;
@@ -436,6 +473,8 @@ function toggleTint() {
  * white tint.
  */
 function updateTint() {
+	if(!StateMemory.show_tint) 
+		return;
 	Outliner.elements.forEach(obj => {
 		const geometry = obj.mesh.geometry;
 		const positionAttribute = geometry.getAttribute('position');
