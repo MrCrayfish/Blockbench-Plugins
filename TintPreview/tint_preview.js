@@ -265,7 +265,6 @@ function createTintColorDialog(project = Project) {
 				set color_code(value) {
 					this.tint_color = value.toLowerCase().replace(/[^a-f0-9#]/g, '');
 				},
-				hsv: { h: 36, s: 70, v: 100, },
 				// Just use the palette/history from main color picker. Maybe in a future update it'll be separate
 				palette: Interface.Panels.color.vue._data.palette,
 				history: Interface.Panels.color.vue._data.history
@@ -313,7 +312,6 @@ function createTintColorDialog(project = Project) {
 			watch: {
 				tint_color: function(value) {
 					this.hover_color = '';
-					Object.assign(this.hsv, ColorPanel.hexToHsv(value));
 					$('#tint_colorpicker').spectrum('set', value);
 					this.text_input = value;
 				},
@@ -382,7 +380,6 @@ function createTintColorDialog(project = Project) {
 				</div>
 			`,
 			mounted() {
-				console.log(tintColor);
 				let colorPicker = $(this.$el).find('#tint_colorpicker').spectrum({
 					preferredFormat: "hex",
 					flat: true,
