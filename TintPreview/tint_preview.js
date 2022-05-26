@@ -43,7 +43,7 @@ function isTintColorArray(obj) {
 	 */
 	function parsedEvent(data) {
 		if(isTintingFormat(Project.format)) {
-			updateTintIfEnabled();
+			updateTint();
 		}
 	}
 
@@ -94,7 +94,7 @@ function isTintColorArray(obj) {
 			}
 			for(let f of Canvas.face_order) {
 				if(faceTintChanged(obj.faces[f], oldObj.faces[f])) {
-					updateTintIfEnabled();
+					updateTint();
 					break;
 				}
 			}
@@ -128,7 +128,7 @@ function isTintColorArray(obj) {
 				}
 				for(let f of Canvas.face_order) {
 					if(faceTintChanged(beforeObj.faces[f], postObj.faces[f])) {
-						updateTintIfEnabled();
+						updateTint();
 						return;
 					}
 				}
@@ -141,7 +141,7 @@ function isTintColorArray(obj) {
 						return a.tint != -1;
 					}
 					if(hasFaceTint(beforeObj.faces[f])) {
-						updateTintIfEnabled();
+						updateTint();
 						return;
 					}
 				}
@@ -262,7 +262,7 @@ Important: This plugin is designed for JSON models only and will not work for ot
 				onChange: (state) => {
 					StateMemory.show_tint = state;
 					StateMemory.save('show_tint');
-					updateTint();
+					updateTint(true);
 				}
 			});
 
@@ -376,7 +376,7 @@ function createTintColorDialog(project = Project) {
 					let color = new tinycolor(value);
 					this.tint_color = color.toHexString();
 					dragTintColor = convertTintToRgbArray(color);
-					updateTintIfEnabled();
+					updateTint();
 				},
 				tl
 			},
@@ -459,7 +459,7 @@ function createTintColorDialog(project = Project) {
 					move: function(color) {
 						colorPickerDialog.set(color);
 						dragTintColor = convertTintToRgbArray(color);
-						updateTintIfEnabled();
+						updateTint();
 					}
 				});
 				$(colorPicker).on("dragstop.spectrum", function(e, color) {
@@ -512,7 +512,7 @@ function setTintColor(color, save = false) {
 	let rgb = convertTintToRgbArray(color);
 	ProjectData[Project.uuid].tintColor = rgb;
 	if(save) Project.saved = false;
-	updateTintIfEnabled();
+	updateTint();
 }
 
 /**
@@ -531,16 +531,14 @@ function getTintColor(project = Project) {
 	return tintColor;
 }
 
-function updateTintIfEnabled() {
-	if(StateMemory.show_tint) updateTint();
-}
-
 /**
  * Updates the color atrribute on the cube geometry. Faces that that have tint
  * enabled will recieve the tint color while other faces will just recieve a
  * white tint.
  */
-function updateTint() {
+function updateTint(force = false) {
+	if(!StateMemory.show_tint && !force)
+		return;
 	Outliner.elements.forEach(obj => {
 		const geometry = obj.mesh.geometry;
 		const positionAttribute = geometry.getAttribute('position');
