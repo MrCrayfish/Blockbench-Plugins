@@ -87,6 +87,8 @@ function isTintColorArray(obj) {
 		if(Undo.current_save.elements && Object.keys(Undo.current_save.elements).length && Array.isArray(elements) && elements.length) {
 			let obj = data.aspects.elements[0];
 			let oldObj = Undo.current_save.elements[obj.uuid];
+			if(!obj.faces || !oldObj.faces)
+				return;
 			function faceTintChanged(a, b) {
 				return a.tint != b.tint;
 			}
