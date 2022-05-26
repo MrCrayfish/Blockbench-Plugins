@@ -33,7 +33,9 @@ function isTintColorArray(obj) {
 	 * Hook to patch textures when added
 	 */
 	function addTextureEvent(data) {
-		applyTintingShader(Project, data.texture);
+		if(isTintingFormat(Project.format)) {
+			applyTintingShader(Project, data.texture);
+		}
 	} 
 
 	/**
@@ -78,6 +80,9 @@ function isTintColorArray(obj) {
 	 * Causes any changes to face tint toggle to update the tint preview
 	 */
 	function finishEditEvent(data) {
+		if(!isTintingFormat(Project.format)) {
+			return;
+		}
 		let elements = data.aspects.elements;
 		if(Undo.current_save.elements && Object.keys(Undo.current_save.elements).length && Array.isArray(elements) && elements.length) {
 			let obj = data.aspects.elements[0];
@@ -99,6 +104,10 @@ function isTintColorArray(obj) {
 	 * element to trigger tint update.
 	 */
 	function undoRedoEvent(data) {
+		if(!isTintingFormat(Project.format)) {
+			return;
+		}
+
 		let beforeElements = data.entry.before.elements;
 		if(typeof beforeElements !== 'object' || !beforeElements)
 			return;
