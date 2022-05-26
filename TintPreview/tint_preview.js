@@ -43,7 +43,7 @@ function isTintColorArray(obj) {
 	 */
 	function parsedEvent(data) {
 		if(isTintingFormat(Project.format)) {
-			updateTint();
+			updateTintIfEnabled();
 		}
 	}
 
@@ -94,7 +94,7 @@ function isTintColorArray(obj) {
 			}
 			for(let f of Canvas.face_order) {
 				if(faceTintChanged(obj.faces[f], oldObj.faces[f])) {
-					updateTint();
+					updateTintIfEnabled();
 					break;
 				}
 			}
@@ -128,7 +128,7 @@ function isTintColorArray(obj) {
 				}
 				for(let f of Canvas.face_order) {
 					if(faceTintChanged(beforeObj.faces[f], postObj.faces[f])) {
-						updateTint();
+						updateTintIfEnabled();
 						return;
 					}
 				}
@@ -141,7 +141,7 @@ function isTintColorArray(obj) {
 						return a.tint != -1;
 					}
 					if(hasFaceTint(beforeObj.faces[f])) {
-						updateTint();
+						updateTintIfEnabled();
 						return;
 					}
 				}
@@ -252,16 +252,17 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			StateMemory.init('tint_color_wheel', 'boolean');
 			StateMemory.init('show_tint', 'boolean');
 
-			toggleTintAction = new Action({
-				id: 'toggle_tint_preview',
-				name: 'Toggle Tint Preview',
+			toggleTintAction = new Toggle('toggle_tint_preview', {
+				name: 'Show Tint Color',
 				icon: (StateMemory.show_tint ? 'fa-fill-drip' : 'fa-fill'),
 				description: 'Toggles the tint effect for tint enabled faces',
 				category: 'tools',
+				default: StateMemory.show_tint,
 				condition: () => isTintingFormat(Format),
-				click: () => {
-					toggleTint();
-					toggleTintAction.setIcon(StateMemory.show_tint ? 'fa-fill-drip' : 'fa-fill');
+				onChange: (state) => {
+					StateMemory.show_tint = state;
+					StateMemory.save('show_tint');
+					updateTint();
 				}
 			});
 
@@ -375,7 +376,7 @@ function createTintColorDialog(project = Project) {
 					let color = new tinycolor(value);
 					this.tint_color = color.toHexString();
 					dragTintColor = convertTintToRgbArray(color);
-					updateTint();
+					updateTintIfEnabled();
 				},
 				tl
 			},
@@ -458,7 +459,7 @@ function createTintColorDialog(project = Project) {
 					move: function(color) {
 						colorPickerDialog.set(color);
 						dragTintColor = convertTintToRgbArray(color);
-						updateTint();
+						updateTintIfEnabled();
 					}
 				});
 				$(colorPicker).on("dragstop.spectrum", function(e, color) {
@@ -511,7 +512,7 @@ function setTintColor(color, save = false) {
 	let rgb = convertTintToRgbArray(color);
 	ProjectData[Project.uuid].tintColor = rgb;
 	if(save) Project.saved = false;
-	updateTint();
+	updateTintIfEnabled();
 }
 
 /**
@@ -530,13 +531,8 @@ function getTintColor(project = Project) {
 	return tintColor;
 }
 
-/**
- * Toggles the tint preview
- */
-function toggleTint() {
-	StateMemory.show_tint = !StateMemory.show_tint;
-	StateMemory.save('show_tint');
-	updateTint();
+function updateTintIfEnabled() {
+	if(StateMemory.show_tint) updateTint();
 }
 
 /**
@@ -545,8 +541,6 @@ function toggleTint() {
  * white tint.
  */
 function updateTint() {
-	if(!StateMemory.show_tint) 
-		return;
 	Outliner.elements.forEach(obj => {
 		const geometry = obj.mesh.geometry;
 		const positionAttribute = geometry.getAttribute('position');
