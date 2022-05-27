@@ -562,6 +562,7 @@ function updateTint(force = false) {
 			}
 		}
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+		obj.preview_controller.updateFaces(obj);
 	});
 }
 
