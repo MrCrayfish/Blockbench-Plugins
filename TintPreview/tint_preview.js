@@ -639,7 +639,7 @@ function isTintColorArray(obj) {
 Important: This plugin is designed for JSON models only and will not work for other formats.`,
 		tags: ["Minecraft: Java Edition"],
 		icon: 'fa-fill',
-		version: '1.0.0',
+		version: '1.1.0',
 		variant: 'both',
 		min_version: '4.3.0',
 		onload() {
