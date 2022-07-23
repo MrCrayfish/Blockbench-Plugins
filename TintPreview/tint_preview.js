@@ -286,6 +286,8 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			MenuBar.addAction(toggleTintAction, 'tools');
 			MenuBar.addAction(setTintColorAction, 'tools');
 			MenuBar.update();
+
+			updateTint(true);
 		},
 		onunload() {
 			toggleTintAction.delete();
