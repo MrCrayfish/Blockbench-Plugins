@@ -301,6 +301,7 @@ Important: This plugin is designed for JSON models only and will not work for ot
 			Blockbench.removeListener('undo', undoRedoEvent);
 			Blockbench.removeListener('redo', undoRedoEvent);
 			patchedCodecs.forEach(codec => codec.removeListener('parsed', parsedEvent));
+			clearTint();
 		}
 	});
 })();
@@ -563,6 +564,17 @@ function updateTint(force = false) {
 			}
 		}
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+		obj.preview_controller.updateFaces(obj);
+	});
+}
+
+/**
+ * Removes the tint from obj geometry. Only called when uninstalling plugin
+ */
+function clearTint() {
+	Outliner.elements.forEach(obj => {
+		const geometry = obj.mesh.geometry;
+		geometry.deleteAttribute('color');
 		obj.preview_controller.updateFaces(obj);
 	});
 }
