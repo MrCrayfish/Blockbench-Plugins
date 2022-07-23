@@ -227,6 +227,7 @@ Important: This plugin is designed for JSON models only and will not work for ot
 		icon: 'fa-fill',
 		version: '1.0.0',
 		variant: 'both',
+		min_version: '4.3.0',
 		onload() {
 			// Custom translations. Am I doing this right?
 			window.Language.addTranslations('en', {
@@ -578,6 +579,7 @@ function applyTintingShader(project, texture) {
 		attribute float highlight;
 
 		uniform bool SHADE;
+		uniform int LIGHTSIDE;
 
 		varying vec3 vColor;
 		varying vec2 vUv;
@@ -590,9 +592,32 @@ function applyTintingShader(project, texture) {
 
 		void main() {
 			if (SHADE) {
-				vec3 N = normalize( vec3( modelMatrix * vec4(normal, 0.0) ) );
-				float yLight = (1.0+N.y) * 0.5;
-				light = yLight * (1.0-AMBIENT) + N.x*N.x * XFAC + N.z*N.z * ZFAC + AMBIENT;
+				vec3 N = normalize(vec3(modelMatrix * vec4(normal, 0.0)));
+				if (LIGHTSIDE == 1) {
+					float temp = N.y;
+					N.y = N.z * -1.0;
+					N.z = temp;
+				}
+				if (LIGHTSIDE == 2) {
+					float temp = N.y;
+					N.y = N.x;
+					N.x = temp;
+				}
+				if (LIGHTSIDE == 3) {
+					N.y = N.y * -1.0;
+				}
+				if (LIGHTSIDE == 4) {
+					float temp = N.y;
+					N.y = N.z;
+					N.z = temp;
+				}
+				if (LIGHTSIDE == 5) {
+					float temp = N.y;
+					N.y = N.x * -1.0;
+					N.x = temp;
+				}
+				float yLight = (1.0 + N.y) * 0.5;
+				light = yLight * (1.0 - AMBIENT) + N.x * N.x * XFAC + N.z * N.z * ZFAC + AMBIENT;
 			} else {
 				light = 1.0;
 			}
@@ -605,7 +630,7 @@ function applyTintingShader(project, texture) {
 			}
 			vColor = color;
 			vUv = uv;
-			vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+			vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 			gl_Position = projectionMatrix * mvPosition;
 		}`
 	var fragShader = `
@@ -617,7 +642,7 @@ function applyTintingShader(project, texture) {
 
 		uniform bool SHADE;
 		uniform bool EMISSIVE;
-		uniform float BRIGHTNESS;
+		uniform vec3 LIGHTCOLOR;
 
 		varying vec3 vColor;
 		varying vec2 vUv;
@@ -630,10 +655,15 @@ function applyTintingShader(project, texture) {
 			if (color.a < 0.01) 
 				discard;
 			if (EMISSIVE == false) {
-				color = vec4(lift + color.rgb * light * BRIGHTNESS, color.a);
+				color = vec4(lift + color.rgb * light, color.a);
+				color.r = color.r * LIGHTCOLOR.r;
+				color.g = color.g * LIGHTCOLOR.g;
+				color.b = color.b * LIGHTCOLOR.b;
 			} else {
-				float light2 = (light * BRIGHTNESS) + (1.0 - light * BRIGHTNESS) * (1.0 - color.a);
-				color = vec4(lift + color.rgb * light2, 1.0);
+				float light_r = (light * LIGHTCOLOR.r) + (1.0 - light * LIGHTCOLOR.r) * (1.0 - color.a);
+				float light_g = (light * LIGHTCOLOR.g) + (1.0 - light * LIGHTCOLOR.g) * (1.0 - color.a);
+				float light_b = (light * LIGHTCOLOR.b) + (1.0 - light * LIGHTCOLOR.b) * (1.0 - color.a);
+				color = vec4(lift + color.r * light_r, lift + color.g * light_g, lift + color.b * light_b, 1.0);
 			}
 			if (lift > 0.2) {
 				color.r = color.r * 0.6;
@@ -646,7 +676,8 @@ function applyTintingShader(project, texture) {
 		uniforms: {
 			map: {type: 't', value: originalMat.map},
 			SHADE: {type: 'bool', value: settings.shading.value},
-			BRIGHTNESS: {type: 'bool', value: settings.brightness.value / 50},
+			LIGHTCOLOR: {type: 'vec3', value: new THREE.Color().copy(Canvas.global_light_color).multiplyScalar(settings.brightness.value / 50)},
+			LIGHTSIDE: {type: 'int', value: Canvas.global_light_side},
 			EMISSIVE: {type: 'bool', value: texture.render_mode == 'emissive'}
 		},
 		vertexShader: vertShader,
